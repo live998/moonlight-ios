@@ -1,0 +1,59 @@
+name: Build Moonlight IPA for iOS 10.0.1
+
+on:
+  workflow_dispatch:
+    inputs:
+      deployment_target:
+        description: '最低 iOS 版本（你的设备是 10.0.1，填 10.0 即可）'
+        required: false
+        default: '10.0'
+
+jobs:
+  build:
+    runs-on: macos-12
+
+    steps:
+      - name: 选择 Xcode 12.5.1（Xcode 14+ 已不允许 iOS 10 部署目标）
+        uses: actions/setup-xcode@v3
+        with:
+          xcode-version: '12.5.1'
+
+      - name: 拉取 moonlight-ios @ v3.0.0（含 libs 子模块）
+        uses: actions/checkout@v4
+        with:
+          repository: moonlight-stream/moonlight-ios
+          ref: v3.0.0
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: 编译未签名的 Moonlight.app（arm64，目标 iOS 10）
+        run: |
+          xcodebuild build \
+            -project Moonlight.xcodeproj \
+            -target Moonlight \
+            -sdk iphoneos \
+            -configuration Release \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=NO \
+            IPHONEOS_DEPLOYMENT_TARGET=${{ github.event.inputs.deployment_target }} \
+            ENABLE_BITCODE=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="" \
+            PROVISIONING_PROFILE="" \
+            SYMROOT=$PWD/build \
+            OBJROOT=$PWD/build/obj
+
+      - name: 打包成 IPA（未签名）
+        run: |
+          APP=$(find build -name "Moonlight.app" -type d | head -1)
+          echo "找到 app: $APP"
+          mkdir -p Payload
+          cp -r "$APP" Payload/
+          zip -r Moonlight-iOS10.0.1.ipa Payload
+          ls -la Moonlight-iOS10.0.1.ipa
+
+      - name: 上传 IPA 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: Moonlight-iOS10-ipa
+          path: Moonlight-iOS10.0.1.ipa
